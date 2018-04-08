@@ -1,4 +1,3 @@
-//
 // Camcog URL service
 //
 // Generates a unique URL for a set of cognitive questionnaires using the CAMCOG web service.
