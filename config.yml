@@ -1,0 +1,8 @@
+username:	api@cardiff.ac.uk
+password: <use environment variable or command line argument>
+baseURL: https://connect-demo.int.cantab.com
+studyID: 5aa116b90cf20060dced3702
+groupDef: 5aa116d70cf20060dced3723
+site: 5aa117fa0cf20060dced3a75
+studyDef: 5aa116d70cf20060dced3731
+organisation: 5aa116360cf20060dced2751
