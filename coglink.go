@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 )
 
 const (
@@ -38,6 +39,10 @@ var flagPassword = flag.String("password", "", "password")
 var flagSubject = flag.String("subject", "", "local subject identifier")
 var flagProcess = flag.String("csv", "", "Process a CSV containing identifiers in the first column")
 var flagVersion = flag.Bool("version", false, "Prints version information")
+var flagServer = flag.Bool("server", false, "Run a HTTP redirection server")
+var flagServerPort = flag.Int("port", 8080, "Server port, default 8080")
+
+var cc *Camcog
 
 func main() {
 	// bring in command-line flags into our configuration
@@ -59,7 +64,7 @@ func main() {
 	if err != nil {             // Handle errors reading the config file
 		panic(fmt.Errorf("fatal error config file: %s", err))
 	}
-	cc, err := NewCamcog(
+	cc, err = NewCamcog(
 		viper.GetString("baseURL"),
 		viper.GetString("username"),
 		viper.GetString("password"),
@@ -84,8 +89,26 @@ func main() {
 		processCsv(cc, *flagProcess)
 		os.Exit(0)
 	}
+	if *flagServer {
+		http.HandleFunc("/", redirect)
+		err := http.ListenAndServe(fmt.Sprintf(":%d", 8080), nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	flag.PrintDefaults()
 	os.Exit(1)
+}
+
+func redirect(w http.ResponseWriter, r *http.Request) {
+	log.Printf("path requested : %s\n", r.URL.Path)
+	_, patient := path.Split(r.URL.Path) // get filename component
+	url, err := processSingleSubject(cc, patient)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error: %v", err), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, url, 301)
 }
 
 func processCsv(cc *Camcog, filename string) error {
@@ -98,15 +121,20 @@ func processCsv(cc *Camcog, filename string) error {
 	if err != nil {
 		return err
 	}
+	w := csv.NewWriter(os.Stdout)
 	for _, record := range records {
 		id := record[0]
-		email := record[1]
 		url, err := processSingleSubject(cc, id)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s,%s,%s\n", id, email, url)
+		record = append(record, url)
+		w.Write(record)
+		if err = w.Error(); err != nil {
+			return err
+		}
 	}
+	w.Flush()
 	return nil
 }
 
@@ -231,7 +259,8 @@ func (cc Camcog) createSubject(groupDef string, org string, studyID string, site
 
 // GenerateURL generates a URL for the subject to complete their questionnaires
 func (cc Camcog) GenerateURL(subject string, accesscode string) string {
-	return fmt.Sprintf("https://app.cantab.com/subject/index.html?accessCode=%s&subject=%s", accesscode, subject)
+	rel := &url.URL{Path: "/subject/index.html", RawQuery: fmt.Sprintf("accessCode=%s&subject=%s", accesscode, subject)}
+	return cc.baseURL.ResolveReference(rel).String()
 }
 
 // GenerateSubjectAccessCode generates an access code for the subject specified
